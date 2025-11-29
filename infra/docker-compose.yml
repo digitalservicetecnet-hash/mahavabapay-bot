@@ -1,0 +1,114 @@
+version: '3.8'
+
+services:
+  bot:
+    build: ../bot
+    container_name: mahavabapay-bot
+    env_file: ../.env
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+    volumes:
+      - ../bot:/app
+    networks:
+      - mahavaba-network
+
+  worker:
+    build: ../worker
+    container_name: mahavabapay-worker
+    env_file: ../.env
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+    volumes:
+      - ../worker:/app
+    networks:
+      - mahavaba-network
+
+  admin:
+    build: ../admin
+    container_name: mahavabapay-admin
+    env_file: ../.env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+    networks:
+      - mahavaba-network
+
+  db:
+    image: postgres:15
+    container_name: mahavabapay-db
+    environment:
+      POSTGRES_DB: mahavaba
+      POSTGRES_USER: mahavaba
+      POSTGRES_PASSWORD: mahavaba_pass
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ../migrations:/migrations
+    ports:
+      - "5432:5432"
+    networks:
+      - mahavaba-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mahavaba"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    container_name: mahavabapay-redis
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - mahavaba-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: mahavabapay-prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - mahavaba-network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: mahavabapay-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - mahavaba-network
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+
+volumes:
+  db_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  mahavaba-network:
+    driver: bridge
